@@ -171,7 +171,7 @@ def process_file(filename, config, word_counter=None, char_counter=None):
     examples = []
     eval_examples = {}
 
-    outputs = Parallel(n_jobs=6, verbose=10)(delayed(_process_article)(article, config) for article in data)
+    outputs = Parallel(n_jobs=12, verbose=10)(delayed(_process_article)(article, config) for article in data)
     # outputs = [_process_article(article, config) for article in data]
     examples = [e[0] for e in outputs]
     for _, e in outputs:
@@ -307,139 +307,7 @@ def save(filename, obj, message=None):
     with open(filename, "w") as fh:
         json.dump(obj, fh)
 
-        
-def prepro_train(config):
-    random.seed(13)
-
-    record_file = config.train_record_file
-    eval_file = config.train_eval_file
-
-    example_jsonl = 'examples.jsonl'
-    eval_example_jsonl = 'eval_examples.jsonl'
-
-    word_counter, char_counter = Counter(), Counter()
-    data = json.load(open(config.data_file, 'r'))
-    with open(example_jsonl, "a") as fr:
-        with open(eval_example_jsonl, "a") as fe:
-            for article in tqdm(data, total=len(data)):
-                example, eval_example = _process_article(article, config)
-                for token in example['ques_tokens'] + example['context_tokens']:
-                    word_counter[token] += 1
-                    for char in token:
-                        char_counter[char] += 1
-                json.dump(example, fr)
-                fr.write('\n')
-
-                json.dump(eval_example, fe)
-                fe.write('\n')
-
-    word_emb_mat, word2idx_dict, idx2word_dict = get_embedding(word_counter, "word",
-                                                               emb_file=config.glove_word_file,
-                                                               size=config.glove_word_size,
-                                                               vec_size=config.glove_dim,
-                                                               token2idx_dict=None)
-
-    char_emb_mat, char2idx_dict, idx2char_dict = get_embedding(
-        char_counter, "char", emb_file=None, size=None, vec_size=config.char_dim, token2idx_dict=None)
-
-    if not os.path.isfile(config.word2idx_file):
-        save(config.word_emb_file, word_emb_mat, message="word embedding")
-        save(config.char_emb_file, char_emb_mat, message="char embedding")
-        save(config.word2idx_file, word2idx_dict, message="word2idx")
-        save(config.char2idx_file, char2idx_dict, message="char2idx")
-        save(config.idx2word_file, idx2word_dict, message='idx2word')
-        save(config.idx2char_file, idx2char_dict, message='idx2char')
-
-    # with open(config.word2idx_file, "r") as fh:
-    #     word2idx_dict = json.load(fh)
-    #
-    # with open(config.char2idx_file, "r") as fh:
-    #     char2idx_dict = json.load(fh)
-
-    para_limit = config.para_limit
-    ques_limit = config.ques_limit
-    char_limit = config.char_limit
-
-    def filter_func(exm):
-        return len(exm["context_tokens"]) > para_limit or len(exm["ques_tokens"]) > ques_limit
-
-    # build_features(config, examples, config.data_split, record_file, word2idx_dict, char2idx_dict)
-    # save(eval_file, eval_examples, message='{} eval'.format(config.data_split))
-    data_points = []
-    with tqdm(total=os.path.getsize(example_jsonl)) as pbar:
-        with open(example_jsonl, "r") as fr:
-            for l in fr:
-                pbar.update(len(l))
-                example = json.loads(l)
-                if filter_func(example):
-                    continue
-
-                context_idxs = torch.LongTensor(para_limit).zero_()
-                context_char_idxs = torch.LongTensor(para_limit, char_limit).zero_()
-                ques_idxs = torch.LongTensor(ques_limit).zero_()
-                ques_char_idxs = torch.LongTensor(ques_limit, char_limit).zero_()
-
-                def _get_word(word):
-                    for each in (word, word.lower(), word.capitalize(), word.upper()):
-                        if each in word2idx_dict:
-                            return word2idx_dict[each]
-                    return 1
-
-                def _get_char(char):
-                    if char in char2idx_dict:
-                        return char2idx_dict[char]
-                    return 1
-
-                for i, token in enumerate(example["context_tokens"]):
-                    context_idxs[i] = _get_word(token)
-
-                for i, token in enumerate(example["ques_tokens"]):
-                    ques_idxs[i] = _get_word(token)
-
-                for i, token in enumerate(example["context_chars"]):
-                    for j, char in enumerate(token):
-                        if j == char_limit:
-                            break
-                        context_char_idxs[i, j] = _get_char(char)
-
-                for i, token in enumerate(example["ques_chars"]):
-                    for j, char in enumerate(token):
-                        if j == char_limit:
-                            break
-                        ques_char_idxs[i, j] = _get_char(char)
-
-                start, end = example["y1s"][-1], example["y2s"][-1]
-                y1, y2 = start, end
-
-                data_points.append({'context_idxs': context_idxs,
-                                    'context_char_idxs': context_char_idxs,
-                                    'ques_idxs': ques_idxs,
-                                    'ques_char_idxs': ques_char_idxs,
-                                    'y1': y1,
-                                    'y2': y2,
-                                    'id': example['id'],
-                                    'start_end_facts': example['start_end_facts']})
-    torch.save(data_points, record_file)
-
-    del data_points
-
-    eval_examples = {}
-    with tqdm(total=os.path.getsize(eval_example_jsonl)) as pbar:
-        with open(eval_example_jsonl, "r") as fe:
-            for l in fe:
-                pbar.update(len(l))
-                e = json.loads(l)
-                eval_examples[e['id']] = e
-    save(eval_file, eval_examples, message='{} eval'.format(config.data_split))
-
-
 def prepro(config):
-    if config.data_split == 'train':
-        prepro_train(config)
-    else:
-        prepro_dev(config)
-        
-def prepro_dev(config):
     random.seed(13)
 
     if config.data_split == 'train':
@@ -484,4 +352,3 @@ def prepro_dev(config):
         save(config.char2idx_file, char2idx_dict, message="char2idx")
         save(config.idx2word_file, idx2word_dict, message='idx2word')
         save(config.idx2char_file, idx2char_dict, message='idx2char')
-
