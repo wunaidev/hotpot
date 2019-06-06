@@ -73,9 +73,9 @@ def train(config):
         return DataIterator(dev_buckets, config.batch_size, config.para_limit, config.ques_limit, config.char_limit, False, config.sent_limit)
 
     if config.sp_lambda > 0:
-        model = SPModel(config, word_mat, char_mat)
+        model = SPModel(config, word_mat, char_mat, idx2word_dict)
     else:
-        model = Model(config, word_mat, char_mat)
+        model = Model(config, word_mat, char_mat, idx2word_dict)
 
     logging('nparams {}'.format(sum([p.nelement() for p in model.parameters() if p.requires_grad])))
     ori_model = model.cuda()
