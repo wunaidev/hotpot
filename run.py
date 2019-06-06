@@ -262,9 +262,9 @@ def test(config):
             ques_limit, config.char_limit, False, config.sent_limit)
 
     if config.sp_lambda > 0:
-        model = SPModel(config, word_mat, char_mat)
+        model = SPModel(config, word_mat, char_mat, idx2word_dict)
     else:
-        model = Model(config, word_mat, char_mat)
+        model = Model(config, word_mat, char_mat, idx2word_dict)
     ori_model = model.cuda()
     ori_model.load_state_dict(torch.load(os.path.join(config.save, 'model.pt')))
     model = nn.DataParallel(ori_model)
