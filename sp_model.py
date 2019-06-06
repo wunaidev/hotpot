@@ -84,22 +84,36 @@ class SPModel(nn.Module):
         #context bert
         context_str_list = []
         for i in range(bsz):
-            context_str = ""
+            context_str = []
             for j in range(para_size):
-                context_str += self.idx2word_dict[str(int(context_idxs[i][j]))] + " "
+                cur_idx = int(context_idxs[i][j])
+                if cur_idx == 0:
+                    continue
+                if cur_idx == 1:
+                    context_str.append("[UNK]")
+                else:
+                    context_str.append(self.idx2word_dict[str(cur_idx)])
             context_str_list.append(context_str)
-            print(context_str)
-        print(len(context_str_list[0]))
-        context_bert = torch.Tensor(self.bc.encode(context_str_list))[:, 1:-2,:].view(bsz, para_size, -1).cuda()
+        print(context_str_list[0])
+        print(self.bc.encode(context_str_list, is_tokenized=True).shape)
+        context_bert = torch.Tensor(self.bc.encode(context_str_list, is_tokenized=True))[:, 1:-2,:].view(bsz, para_size, -1).cuda()
 
         #ques bert
         ques_str_list = []
         for i in range(bsz):
-            ques_str = ""
+            ques_str = []
             for j in range(ques_size):
-                ques_str += self.idx2word_dict[str(int(ques_idxs[i][j]))] + " "
+                cur_idx = int(ques_idxs[i][j])
+                if cur_idx == 0:
+                    continue
+                if cur_idx == 1:
+                    ques_str.append("[UNK]")
+                else:
+                    ques_str.append(self.idx2word_dict[str(cur_idx)])
             ques_str_list.append(ques_str)
-        ques_bert = torch.Tensor(self.bc.encode(ques_str_list))[:, 1:-2,:].view(bsz, ques_size, -1).cuda()
+        print(ques_str_list[0])
+        print(self.bc.encode(ques_str_list, is_tokenized=True).shape)
+        ques_bert = torch.Tensor(self.bc.encode(ques_str_list, is_tokenized=True))[:, 1:-2,:].view(bsz, ques_size, -1).cuda()
 
         context_output = torch.cat([context_word, context_ch, context_bert], dim=2)
         ques_output = torch.cat([ques_word, ques_ch, ques_bert], dim=2)
