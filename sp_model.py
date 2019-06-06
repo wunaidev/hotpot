@@ -1,4 +1,4 @@
-
+from bert_serving.client import BertClient
 import torch
 from torch.autograd import Variable
 from torch import nn
@@ -9,8 +9,12 @@ from torch.nn import init
 from torch.nn.utils import rnn
 
 class SPModel(nn.Module):
-    def __init__(self, config, word_mat, char_mat):
+    def __init__(self, config, word_mat, char_mat, idx2word_dict):
         super().__init__()
+        #ADD BERT
+        self.idx2word_dict = idx2word_dict
+        self.bc = BertClient()
+        
         self.config = config
         self.word_dim = config.glove_dim
         self.word_emb = nn.Embedding(len(word_mat), len(word_mat[0]), padding_idx=0)
@@ -75,7 +79,17 @@ class SPModel(nn.Module):
 
         context_word = self.word_emb(context_idxs)
         ques_word = self.word_emb(ques_idxs)
-
+        
+        context_str_list = []
+        for i in range(context_idx.shape[0]):
+            context_str = ""
+            for j in range(context_idx.shape[1]):
+                context_str += self.idx2word_dict[context_idx[i][j]]
+            context_str_list.append(context_str)
+        context_bert = self.bc.encode(context_str_list)
+        print(context_bert)
+        print(context_bert.shape)
+        
         context_output = torch.cat([context_word, context_ch], dim=2)
         ques_output = torch.cat([ques_word, ques_ch], dim=2)
 
