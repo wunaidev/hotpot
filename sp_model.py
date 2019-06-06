@@ -1,3 +1,4 @@
+
 from bert_serving.client import BertClient
 import torch
 from torch.autograd import Variable
@@ -13,8 +14,8 @@ class SPModel(nn.Module):
         super().__init__()
         #ADD BERT
         self.idx2word_dict = idx2word_dict
-        self.bc = BertClient()
-        
+        self.bc = BertClient(check_length=False)
+
         self.config = config
         self.word_dim = config.glove_dim
         self.word_emb = nn.Embedding(len(word_mat), len(word_mat[0]), padding_idx=0)
@@ -79,19 +80,29 @@ class SPModel(nn.Module):
 
         context_word = self.word_emb(context_idxs)
         ques_word = self.word_emb(ques_idxs)
-        
+
+        #context bert
         context_str_list = []
-        for i in range(context_idx.shape[0]):
+        for i in range(bsz):
             context_str = ""
-            for j in range(context_idx.shape[1]):
-                context_str += self.idx2word_dict[context_idx[i][j]]
+            for j in range(para_size):
+                context_str += self.idx2word_dict[str(int(context_idxs[i][j]))] + " "
             context_str_list.append(context_str)
-        context_bert = self.bc.encode(context_str_list)
-        print(context_bert)
-        print(context_bert.shape)
-        
-        context_output = torch.cat([context_word, context_ch], dim=2)
-        ques_output = torch.cat([ques_word, ques_ch], dim=2)
+            print(context_str)
+        print(len(context_str_list[0]))
+        context_bert = torch.Tensor(self.bc.encode(context_str_list))[:, 1:-2,:].view(bsz, para_size, -1).cuda()
+
+        #ques bert
+        ques_str_list = []
+        for i in range(bsz):
+            ques_str = ""
+            for j in range(ques_size):
+                ques_str += self.idx2word_dict[str(int(ques_idxs[i][j]))] + " "
+            ques_str_list.append(ques_str)
+        ques_bert = torch.Tensor(self.bc.encode(ques_str_list))[:, 1:-2,:].view(bsz, ques_size, -1).cuda()
+
+        context_output = torch.cat([context_word, context_ch, context_bert], dim=2)
+        ques_output = torch.cat([ques_word, ques_ch, ques_bert], dim=2)
 
         context_output = self.rnn(context_output, context_lens)
         ques_output = self.rnn(ques_output)
@@ -244,3 +255,4 @@ class GateLayer(nn.Module):
 
     def forward(self, input):
         return self.linear(input) * self.sigmoid(self.gate(input))
+
