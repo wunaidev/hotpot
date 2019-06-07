@@ -14,6 +14,8 @@ class SPModel(nn.Module):
         super().__init__()
         #ADD BERT
         self.idx2word_dict = idx2word_dict
+        self.idx2word_dict["0"] = "[NONE]"
+        self.idx2word_dict["1"] = "[UNK]"
         self.bc = BertClient(check_length=False)
 
         self.config = config
@@ -80,50 +82,25 @@ class SPModel(nn.Module):
 
         context_word = self.word_emb(context_idxs)
         ques_word = self.word_emb(ques_idxs)
-
-        #context bert
-        context_str_list = []
-        for i in range(bsz):
-            context_str = []
-            for j in range(para_size):
-                cur_idx = int(context_idxs[i][j])
-                if cur_idx == 0:
-                    context_str.append("[NONE]")
-                elif cur_idx == 1:
-                    context_str.append("[UNK]")
-                else:
-                    context_str.append(self.idx2word_dict[str(cur_idx)])
-            context_str_list.append(context_str)
         
-        context_bert = None
-        for _ in range(((para_size - 1) // 500) + 1):
-            cur_context = np.array(context_str_list)[:, _*500:min((_+1)*500, para_size)].tolist()
-            temp = torch.Tensor(self.bc.encode(cur_context, is_tokenized=True))[:, 1:-1,:].cuda()
-            if _ == 0:
-                context_bert = temp
-            else:
-                context_bert = torch.cat([context_bert, temp], dim=1)
+        
+        context_str_list = [[self.idx2word_dict[elem] for elem in each_batch] for each_batch in context_idxs]
+        ques_str_list = [[self.idx2word_dict[elem] for elem in each_batch] for each_batch in ques_idxs]
+        
+        #context_bert = None
+        #for _ in range(((para_size - 1) // 500) + 1):
+        #    cur_context = np.array(context_str_list)[:, _*500:min((_+1)*500, para_size)].tolist()
+        #    temp = torch.Tensor(self.bc.encode(cur_context, is_tokenized=True))[:, 1:-1,:].cuda()
+        #    if _ == 0:
+        #        context_bert = temp
+        #    else:
+        #        context_bert = torch.cat([context_bert, temp], dim=1)
 
         
-        #ques bert
-        ques_str_list = []
-        for i in range(bsz):
-            ques_str = []
-            for j in range(ques_size):
-                cur_idx = int(ques_idxs[i][j])
-                if cur_idx == 0:
-                    ques_str.append("[NONE]")
-                elif cur_idx == 1:
-                    ques_str.append("[UNK]")
-                else:
-                    ques_str.append(self.idx2word_dict[str(cur_idx)])
-            ques_str_list.append(ques_str)
-        print(len(ques_str_list[0]))
-        print(self.bc.encode(ques_str_list, is_tokenized=True).shape)
-        ques_bert = torch.Tensor(self.bc.encode(ques_str_list, is_tokenized=True))[:, 1:-1,:].view(bsz, ques_size, -1).cuda()
+        #ques_bert = torch.Tensor(self.bc.encode(ques_str_list, is_tokenized=True))[:, 1:-1,:].view(bsz, ques_size, -1).cuda()
 
-        context_output = torch.cat([context_word, context_ch, context_bert], dim=2)
-        ques_output = torch.cat([ques_word, ques_ch, ques_bert], dim=2)
+        context_output = torch.cat([context_word, context_ch], dim=2)
+        ques_output = torch.cat([ques_word, ques_ch], dim=2)
 
         context_output = self.rnn(context_output, context_lens)
         ques_output = self.rnn(ques_output)
