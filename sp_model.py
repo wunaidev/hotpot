@@ -1,5 +1,5 @@
 
-from bert_serving.client import BertClient
+from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 import torch
 from torch.autograd import Variable
 from torch import nn
@@ -16,7 +16,7 @@ class SPModel(nn.Module):
         self.idx2word_dict = idx2word_dict
         self.idx2word_dict["0"] = "[NONE]"
         self.idx2word_dict["1"] = "[UNK]"
-        self.bc = BertClient(check_length=False)
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
         self.config = config
         self.word_dim = config.glove_dim
@@ -86,6 +86,13 @@ class SPModel(nn.Module):
         
         context_str_list = [[self.idx2word_dict[elem] for elem in each_batch] for each_batch in context_idxs]
         ques_str_list = [[self.idx2word_dict[elem] for elem in each_batch] for each_batch in ques_idxs]
+        
+        context_indexed_tokens = self.tokenizer.convert_tokens_to_ids(context_str_list)
+        context_segments_ids = [0 for i in range(para_size)]
+        
+        ques_indexed_tokens = self.tokenizer.convert_tokens_to_ids(ques_str_list)
+        ques_segments_ids = [0 for i in range(ques_size)]
+        
         
         #context_bert = None
         #for _ in range(((para_size - 1) // 500) + 1):
